@@ -9,48 +9,41 @@ def run():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        # Usamos un agente de navegador humano estándar
-        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         page = context.new_page()
 
         try:
-            # 1. Ir al login y esperar a que la página cargue visualmente
+            # 1. Vamos al login y esperamos 5 segundos para que cargue todo
             page.goto("https://conmigente.es/login", wait_until="networkidle")
             page.wait_for_timeout(5000)
             
-            # 2. LOGIN HUMANO: No buscamos cajas, usamos la posición del cursor
-            # Presionamos TAB para entrar en el primer campo (Usuario)
+            # 2. LOGIN CIEGO: Usamos TAB para navegar, evitando selectores dinámicos
+            page.keyboard.press("Tab") 
+            page.keyboard.type(user, delay=120)
             page.keyboard.press("Tab")
-            page.wait_for_timeout(500)
-            page.keyboard.type(user, delay=150)
-            
-            # Presionamos TAB para ir al segundo campo (Contraseña)
-            page.keyboard.press("Tab")
-            page.wait_for_timeout(500)
-            page.keyboard.type(password, delay=150)
-            
-            # Presionamos ENTER
+            page.keyboard.type(password, delay=120)
             page.keyboard.press("Enter")
             
-            # 3. Esperar a que el servidor cree la sesión
+            # Espera larga para que el servidor valide la sesión de socio
             page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(7000)
+            page.wait_for_timeout(8000)
 
-            # 4. Ir a la sección de barrancos
+            # 3. IR A LA SECCIÓN DE PRUEBA
             page.goto("https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/")
             page.wait_for_timeout(5000)
 
-            # 5. CAPTURA DE TEXTO
-            # Si el login funcionó, el texto del foro estará ahí
-            if "soci" in page.content().lower() and "restringida" not in page.content().lower():
-                resumen = "LOGUEADO CON ÉXITO:\n" + page.inner_text("body")[:1500]
+            # 4. CAPTURAR EL TEXTO REAL
+            if "restringida" not in page.content().lower():
+                # Buscamos el contenedor principal de los temas
+                foro = page.query_selector("#wpforo-wrap")
+                resumen = "CONTENIDO DE SOCIO DETECTADO:\n\n" + foro.inner_text()[:1500] if foro else "Logueado pero sin contenedor visible."
             else:
-                resumen = "El login parece no haber funcionado. Texto actual: " + page.inner_text("body")[:500]
+                resumen = "El login falló de nuevo. Sigue apareciendo zona restringida."
 
         except Exception as e:
-            resumen = f"Error en intento #29: {str(e)}"
+            resumen = f"Error en ejecución #30: {str(e)}"
 
-        # 6. Envío a Zapier (Request K)
+        # 5. Envío a Zapier (Esto generará la Request K o L)
         requests.post(webhook, json={"resumen": resumen})
         browser.close()
 
