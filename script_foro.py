@@ -3,63 +3,69 @@ import requests
 from playwright.sync_api import sync_playwright
 
 def run():
-    # 1. Recuperamos tus secretos de GitHub
     user = os.getenv('USER_CONMIGENTE')
     password = os.getenv('PASS_CONMIGENTE')
 
     with sync_playwright() as p:
-        # Lanzamos el navegador
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        # 2. LOGIN (Proceso verificado)
-        print("Iniciando sesión en ConMiGente...")
+        # 1. LOGIN
+        print("Iniciando sesión...")
         page.goto("https://conmigente.es/login")
         page.fill('input[name^="username-"]', user)
         page.fill('input[name^="user_password-"]', password)
         page.keyboard.press("Enter")
         page.wait_for_load_state("networkidle")
 
-        # 3. IR A LA SECCIÓN DE PRUEBA
-        print("Entrando en la sección de Barrancos...")
-        page.goto("https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/")
-        page.wait_for_load_state("networkidle")
+        # 2. IR A LA SECCIÓN DE BARRANCOS
+        url_seccion = "https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/"
+        page.goto(url_seccion)
+        page.wait_for_timeout(5000) # Tiempo para carga de hilos
+
+        # 3. CAPTURAR ENLACES DE LOS TEMAS
+        # Buscamos los enlaces (<a>) que contienen los títulos
+        enlaces = page.query_selector_all('#wpforo-wrap .wpf-thread-title a, #wpforo-wrap .wpforo-topic-title a')
         
-        # Pausa de 4 segundos para que aparezcan los títulos dinámicos
-        page.wait_for_timeout(4000) 
-
-        # 4. BUSCADOR QUIRÚRGICO (Basado en tu captura del Inspector)
-        # Atacamos directamente los títulos de los hilos dentro del wrap de wpForo
-        elementos = page.query_selector_all('#wpforo-wrap .wpf-thread-title, #wpforo-wrap .wpforo-topic-title')
+        # Guardamos las URLs (máximo 3 para no saturar el correo)
+        urls_a_leer = []
+        for link in enlaces:
+            url = link.get_attribute('href')
+            if url and url not in urls_a_leer:
+                urls_a_leer.append(url)
         
-        lista_temas = []
-        for el in elementos:
-            texto = el.inner_text().strip()
-            if texto and len(texto) > 3:
-                lista_temas.append(f"- {texto}")
+        urls_a_leer = urls_a_leer[:3] # Limitamos a los 3 más recientes
+        
+        cuerpo_completo = "DETALLE DE NOVEDADES ENCONTRADAS:\n"
+        cuerpo_completo += "="*30 + "\n\n"
 
-        # Limpieza de duplicados
-        lista_temas = list(dict.fromkeys(lista_temas))
+        # 4. ENTRAR EN CADA TEMA Y LEER EL CONTENIDO
+        for url in urls_a_leer:
+            try:
+                print(f"Leyendo tema: {url}")
+                page.goto(url)
+                page.wait_for_timeout(3000)
+                
+                titulo = page.title().split("-")[0].strip()
+                # Buscamos el texto del primer mensaje del foro
+                contenido = page.query_selector('.wpf-post-content, .wpforo-post-content')
+                texto_post = contenido.inner_text().strip() if contenido else "No se pudo extraer el texto."
+                
+                cuerpo_completo += f"TÍTULO: {titulo}\n"
+                cuerpo_completo += f"CONTENIDO:\n{texto_post}\n"
+                cuerpo_completo += "-"*30 + "\n\n"
+            except Exception as e:
+                print(f"Error leyendo {url}: {e}")
 
-        # 5. PREPARAR EL RESUMEN
-        if lista_temas:
-            resumen = "¡ÉXITO! Temas detectados:\n\n" + "\n".join(lista_temas[:5])
-        else:
-            resumen = f"El bot no ha detectado los títulos. Título de página: {page.title()}"
-
-        # 6. ENVIAR A ZAPIER CON REPORTE DE ERRORES
+        # 5. ENVIAR TODO A ZAPIER
         webhook_url = "https://hooks.zapier.com/hooks/catch/26578118/u0s07g6/"
         
-        print(f"Enviando este contenido a Zapier:\n{resumen}")
-        
-        try:
-            response = requests.post(webhook_url, json={"resumen": resumen})
-            if response.status_code == 200:
-                print(f"¡PETICIÓN ENVIADA! Zapier ha respondido: {response.text}")
-            else:
-                print(f"ERROR EN EL ENVÍO: Código de estado {response.status_code}")
-        except Exception as e:
-            print(f"OCURRIÓ UN ERROR TÉCNICO AL ENVIAR: {e}")
+        if not urls_a_leer:
+            cuerpo_completo = "No se encontraron temas nuevos para leer."
+
+        print(f"Enviando contenido detallado a Zapier...")
+        response = requests.post(webhook_url, json={"resumen": cuerpo_completo})
+        print(f"Respuesta Zapier: {response.status_code}")
 
         browser.close()
 
