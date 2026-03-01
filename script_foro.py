@@ -13,36 +13,39 @@ def run():
         page = context.new_page()
 
         try:
-            # 1. LOGIN (Ya sabemos que funciona)
+            # 1. LOGIN HUMANO (Mantenemos lo que funcionó en el #30)
             page.goto("https://conmigente.es/login", wait_until="networkidle")
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(5000)
             page.keyboard.press("Tab")
-            page.keyboard.type(user, delay=100)
+            page.keyboard.type(user, delay=120)
             page.keyboard.press("Tab")
-            page.keyboard.type(password, delay=100)
+            page.keyboard.type(password, delay=120)
             page.keyboard.press("Enter")
+            
+            # ESPERA CRÍTICA: Damos 10 segundos para que el foro reconozca al socio
             page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(6000)
+            page.wait_for_timeout(10000)
 
-            # 2. IR A LA SECCIÓN DE BARRANCOS
+            # 2. IR A LOS BARRANCOS
             page.goto("https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/")
-            
-            # EL CAMBIO CLAVE: Esperamos hasta 20 segundos a que aparezca el foro
-            page.wait_for_selector("#wpforo-wrap", timeout=20000)
-            
-            # 3. CAPTURA DE LOS TEMAS
-            temas = page.query_selector_all(".wpf-thread-title, .wpforo-topic-title")
-            if temas:
-                titulos = [t.inner_text().strip() for t in temas]
-                resumen = "BARRANCOS ENCONTRADOS:\n\n" + "\n".join(titulos)
+            page.wait_for_timeout(10000) # 10 segundos de carga visual
+
+            # 3. CAPTURA FLEXIBLE
+            # Si no encuentra el contenedor del foro, captura el body completo
+            contenido = page.query_selector("#wpforo-wrap")
+            if contenido:
+                resumen = "BARRANCOS DETECTADOS:\n\n" + contenido.inner_text()[:2000]
             else:
-                # Si no hay temas específicos, capturamos el texto general del foro
-                resumen = "LOGUEADO. Texto del foro:\n" + page.inner_text("#wpforo-wrap")[:1500]
+                texto_total = page.inner_text("body")
+                if "restringida" in texto_total.lower():
+                    resumen = "El login falló: El servidor sigue enviando a zona restringida."
+                else:
+                    resumen = "LOGUEADO (Lectura General):\n\n" + texto_total[:2000]
 
         except Exception as e:
-            resumen = f"Logueado, pero el contenido tardó mucho: {str(e)}"
+            resumen = f"Error en ejecución #32: {str(e)}"
 
-        # 4. ENVÍO FINAL A ZAPIER
+        # 4. ENVÍO A ZAPIER
         requests.post(webhook, json={"resumen": resumen})
         browser.close()
 
