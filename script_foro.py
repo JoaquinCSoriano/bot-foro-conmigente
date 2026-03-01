@@ -9,36 +9,40 @@ def run():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        # Usamos el agente exacto de cuando funcionaba
-        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        # Usamos un agente de navegador muy común para pasar desapercibidos
+        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         page = context.new_page()
 
         try:
-            # 1. Volvemos al login simplificado que funcionó en el #15
-            page.goto("https://conmigente.es/login")
+            # 1. Acceso con tiempo de espera extendido
+            page.goto("https://conmigente.es/login", wait_until="networkidle", timeout=60000)
             
-            # Usamos selectores por nombre, que son más estables que el tipo "text"
-            page.wait_for_selector('input[name*="username"]', timeout=20000)
-            page.fill('input[name*="username"]', user)
-            page.fill('input[name*="password"]', password)
+            # 2. LOGIN SIN SELECTORES FIJOS (Presionamos 'Tab' para navegar por los campos)
+            page.wait_for_timeout(3000)
+            # Hacemos clic en el centro para asegurar que la página tiene el foco
+            page.mouse.click(200, 200) 
+            
+            # Buscamos cualquier input que parezca de usuario
+            page.focus('input[type="text"]')
+            page.keyboard.type(user, delay=100)
+            page.keyboard.press("Tab")
+            page.keyboard.type(password, delay=100)
             page.keyboard.press("Enter")
             
             page.wait_for_load_state("networkidle")
 
-            # 2. Navegamos directo a la sección
-            page.goto("https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/")
-            page.wait_for_timeout(5000)
+            # 3. NAVEGACIÓN A LA SECCIÓN
+            page.goto("https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/", timeout=60000)
+            page.wait_for_timeout(8000)
 
-            # 3. Captura total (Si hay foro, lo mandamos)
-            if page.query_selector("#wpforo-wrap"):
-                resumen = "CONTENIDO:\n" + page.inner_text("#wpforo-wrap")[:1500]
-            else:
-                resumen = "Logueado, pero la página de la comunidad no cargó el contenido esperado."
+            # 4. CAPTURA DE TEXTO (Usamos el cuerpo entero si falla el contenedor)
+            cuerpo = page.query_selector("body")
+            resumen = "LECTURA EXITOSA:\n" + cuerpo.inner_text()[:1500] if cuerpo else "No se pudo leer el cuerpo de la web."
 
         except Exception as e:
-            resumen = f"Fallo en el paso de login/lectura: {str(e)}"
+            resumen = f"Error crítico en intento #27: {str(e)}"
 
-        # 4. Envío a Zapier (Esto generará la Request J)
+        # 5. Envío a Zapier (Request K)
         requests.post(webhook, json={"resumen": resumen})
         browser.close()
 
