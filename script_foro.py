@@ -9,38 +9,38 @@ def run():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        # Usamos un agente de navegador muy común para pasar desapercibidos
-        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         page = context.new_page()
 
         try:
-            # 1. Acceso con tiempo de espera extendido
-            page.goto("https://conmigente.es/login", wait_until="networkidle", timeout=60000)
+            # 1. Vamos al login
+            page.goto("https://conmigente.es/login", wait_until="networkidle")
+            page.wait_for_timeout(4000)
             
-            # 2. LOGIN SIN SELECTORES FIJOS (Presionamos 'Tab' para navegar por los campos)
-            page.wait_for_timeout(3000)
-            # Hacemos clic en el centro para asegurar que la página tiene el foco
-            page.mouse.click(200, 200) 
-            
-            # Buscamos cualquier input que parezca de usuario
-            page.focus('input[type="text"]')
+            # 2. LOGIN CIEGO (Navegando con teclado para evitar bloqueos de selectores)
+            page.keyboard.press("Tab") # Saltamos al primer campo
             page.keyboard.type(user, delay=100)
-            page.keyboard.press("Tab")
+            page.keyboard.press("Tab") # Saltamos al campo contraseña
             page.keyboard.type(password, delay=100)
             page.keyboard.press("Enter")
             
             page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(5000)
 
-            # 3. NAVEGACIÓN A LA SECCIÓN
-            page.goto("https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/", timeout=60000)
-            page.wait_for_timeout(8000)
+            # 3. IR A LA SECCIÓN DE PRUEBA
+            page.goto("https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/")
+            page.wait_for_timeout(10000) # Esperamos 10s para que carguen los barrancos
 
-            # 4. CAPTURA DE TEXTO (Usamos el cuerpo entero si falla el contenedor)
-            cuerpo = page.query_selector("body")
-            resumen = "LECTURA EXITOSA:\n" + cuerpo.inner_text()[:1500] if cuerpo else "No se pudo leer el cuerpo de la web."
+            # 4. CAPTURAR EL FORO REAL
+            # Buscamos el texto que SÍ queremos ver (los barrancos)
+            foro = page.query_selector(".wpforo-main") or page.query_selector("#wpforo-wrap")
+            if foro:
+                resumen = "BARRANCOS DETECTADOS:\n" + foro.inner_text()[:2000]
+            else:
+                resumen = "Página cargada, pero sigo viendo: " + page.inner_text("body")[:500]
 
         except Exception as e:
-            resumen = f"Error crítico en intento #27: {str(e)}"
+            resumen = f"Error en intento #28: {str(e)}"
 
         # 5. Envío a Zapier (Request K)
         requests.post(webhook, json={"resumen": resumen})
