@@ -8,41 +8,43 @@ def run():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        # Usamos el agente de usuario que funcionaba en los éxitos anteriores
+        # 1. RECUPERAMOS EL AGENTE HUMANO (Evita bloqueos)
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         page = context.new_page()
 
-        # 1. LOGIN (Copiado exactamente de la versión que te daba "Verde")
+        # 2. LOGIN ESTABLE (El que daba check verde)
         page.goto("https://conmigente.es/login")
         page.fill('input[name^="username-"]', user)
         page.fill('input[name^="user_password-"]', password)
         page.keyboard.press("Enter")
+        # Espera crucial para que no de Timeout
         page.wait_for_load_state("networkidle")
 
-        # 2. SECCIÓN
+        # 3. NAVEGACIÓN A LA SECCIÓN
         page.goto("https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/")
         page.wait_for_timeout(5000)
 
-        # 3. CAPTURAR ENLACES
-        enlaces = page.query_selector_all('.wpf-thread-title a, .wpforo-topic-title a')
-        urls = [el.get_attribute('href') for el in enlaces if el.get_attribute('href')][:2]
+        # 4. CAPTURAR ENLACES
+        hilos = page.query_selector_all('.wpf-thread-title a, .wpforo-topic-title a')
+        urls = [el.get_attribute('href') for el in hilos if el.get_attribute('href')][:2]
         
-        cuerpo_email = "CONTENIDO DE LOS BARRANCOS:\n\n"
+        cuerpo_email = "REPORTE DE BARRANCOS:\n\n"
 
-        # 4. CAPTURA DE TEXTO (Aquí está el arreglo para Zapier)
+        # 5. LECTURA DE CONTENIDO (Selector corregido para Zapier)
         for url in urls:
             page.goto(url)
             page.wait_for_timeout(4000)
             titulo = page.title().split("-")[0].strip()
             
-            # Usamos un selector mucho más amplio para que NO llegue vacío
+            # Usamos el contenedor general para asegurar que capturemos el mensaje
             post = page.query_selector('#wpforo-wrap')
             texto = post.inner_text().strip() if post else "No se pudo extraer el texto."
             
-            cuerpo_email += f"📌 {titulo}\n📝 {texto[:800]}\n\n" + "-"*30 + "\n\n"
+            cuerpo_email += f"📌 {titulo}\n📝 {texto[:800]}...\n\n" + "-"*30 + "\n\n"
 
-        # 5. ENVÍO A ZAPIER
+        # 6. ENVÍO A ZAPIER
         requests.post("https://hooks.zapier.com/hooks/catch/26578118/u0s07g6/", json={"resumen": cuerpo_email})
+        print("Proceso finalizado y enviado a Zapier.")
         browser.close()
 
 if __name__ == "__main__":
