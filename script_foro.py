@@ -9,41 +9,48 @@ def run():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        # Usamos el agente de usuario que nos ha mantenido en verde
-        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        # Usamos un agente de navegador humano estándar
+        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         page = context.new_page()
 
         try:
-            # 1. Ir al login con espera generosa
+            # 1. Ir al login y esperar a que la página cargue visualmente
             page.goto("https://conmigente.es/login", wait_until="networkidle")
             page.wait_for_timeout(5000)
             
-            # 2. LOGIN: Usamos selectores genéricos para evitar el Timeout
-            # Buscamos cualquier campo que sea de tipo texto o password
-            page.fill('input[type="text"]', user)
-            page.fill('input[type="password"]', password)
+            # 2. LOGIN HUMANO: No buscamos cajas, usamos la posición del cursor
+            # Presionamos TAB para entrar en el primer campo (Usuario)
+            page.keyboard.press("Tab")
+            page.wait_for_timeout(500)
+            page.keyboard.type(user, delay=150)
+            
+            # Presionamos TAB para ir al segundo campo (Contraseña)
+            page.keyboard.press("Tab")
+            page.wait_for_timeout(500)
+            page.keyboard.type(password, delay=150)
+            
+            # Presionamos ENTER
             page.keyboard.press("Enter")
             
-            # Espera crítica para que el servidor procese la sesión
+            # 3. Esperar a que el servidor cree la sesión
             page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(7000)
 
-            # 3. IR A LA SECCIÓN DE PRUEBA (Ya como socio logueado)
+            # 4. Ir a la sección de barrancos
             page.goto("https://conmigente.es/community/categoria-principal-categoria-principal-categoria-principal-prueba/")
             page.wait_for_timeout(5000)
 
-            # 4. CAPTURA DEL CONTENIDO
-            # Si el login funcionó, veremos el contenedor del foro
-            if page.query_selector("#wpforo-wrap"):
-                resumen = "CONTENIDO RECUPERADO:\n" + page.inner_text("#wpforo-wrap")[:1500]
+            # 5. CAPTURA DE TEXTO
+            # Si el login funcionó, el texto del foro estará ahí
+            if "soci" in page.content().lower() and "restringida" not in page.content().lower():
+                resumen = "LOGUEADO CON ÉXITO:\n" + page.inner_text("body")[:1500]
             else:
-                # Si seguimos fuera, capturamos qué está viendo el bot para diagnosticar
-                resumen = f"Login fallido o acceso denegado. Texto visible: {page.inner_text('body')[:500]}"
+                resumen = "El login parece no haber funcionado. Texto actual: " + page.inner_text("body")[:500]
 
         except Exception as e:
-            resumen = f"Error en ejecución #28: {str(e)}"
+            resumen = f"Error en intento #29: {str(e)}"
 
-        # 5. Envío a Zapier (Esto generará la Request K)
+        # 6. Envío a Zapier (Request K)
         requests.post(webhook, json={"resumen": resumen})
         browser.close()
 
