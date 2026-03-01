@@ -24,7 +24,7 @@ def run():
         
         # 3. ENVIAR A ZAPIER (Un solo envío al día = 1 sola tarea)
         # Sustituye la URL de abajo por tu "Catch Hook" de Zapier
-        webhook_url = "TU_URL_DE_ZAPIER_AQUÍ"
+        webhook_url = "https://hooks.zapier.com/hooks/catch/26578118/u0s07g6/"
         requests.post(webhook_url, json={"resumen": resumen})
         
         browser.close()
